@@ -9,12 +9,17 @@ import (
 
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/go-gl/glfw/v3.2/glfw"
+	"time"
 )
 
 var (
 	texture   uint32
 	rotationX float32
 	rotationY float32
+	frameLength float64
+	frames            = 0
+	second            = time.Tick(time.Second)
+	exit	bool
 )
 
 
@@ -26,11 +31,19 @@ func main() {
 	defer glfw.Terminate()
 
 	glfw.WindowHint(glfw.Resizable, glfw.False)
-	window, err := glfw.CreateWindow(1920, 1080, "Cube", nil, nil)
+	window, err := glfw.CreateWindow(1920, 1080, "Cube", glfw.GetPrimaryMonitor(), nil)
 	if err != nil {
 		panic(err)
 	}
 	window.MakeContextCurrent()
+
+	window.SetKeyCallback(func(_ *glfw.Window, key glfw.Key, _ int, action glfw.Action, _ glfw.ModifierKey) {
+		switch {
+		case key == glfw.KeyEscape && action == glfw.Press:
+			exit = true
+		}
+	})
+
 
 	if err := gl.Init(); err != nil {
 		panic(err)
@@ -40,11 +53,25 @@ func main() {
 	defer gl.DeleteTextures(1, &texture)
 
 	setupScene()
-	for !window.ShouldClose() {
+	for !window.ShouldClose() && !exit {
+
+		frameStart := time.Now()
+
 		drawScene()
 		window.SwapBuffers()
 		glfw.PollEvents()
+
+		frames++
+		select {
+		case <-second:
+			frames = 0
+		default:
+		}
+
+		frameLength = time.Since(frameStart).Seconds()
 	}
+
+	window.SetShouldClose(true)
 
 }
 
@@ -124,8 +151,8 @@ func drawScene() {
 	gl.Rotatef(rotationX, 1, 0, 0)
 	gl.Rotatef(rotationY, 0, 1, 0)
 
-	rotationX += 0.5
-	rotationY += 0.5
+	rotationX += float32(90*frameLength)
+	rotationY += float32(90*frameLength)
 
 	gl.BindTexture(gl.TEXTURE_2D, texture)
 
