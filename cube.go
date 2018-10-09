@@ -37,6 +37,7 @@ func main() {
 	}
 	window.MakeContextCurrent()
 	window.SetInputMode(glfw.CursorMode, glfw.CursorHidden)
+	window.SetPos(0,0)
 
 	window.SetKeyCallback(func(_ *glfw.Window, key glfw.Key, _ int, action glfw.Action, _ glfw.ModifierKey) {
 		switch {
