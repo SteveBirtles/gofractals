@@ -8,10 +8,11 @@ import (
 	"log"
 	"time"
 	"runtime"
+	"unsafe"
 )
 
 type pixel struct {
-	r, g, b float32
+	r, g, b uint8
 }
 
 const (
@@ -63,25 +64,25 @@ func mandelbrot(x, y int) pixel {
 		return BLACK
 	} else {
 
-		value := float32(6*i) / float32(iterations)
+		value := 6*float64(i)/float64(iterations)
 
 		if value < 1 {
-			return pixel{value, 0, 1}
+			return pixel{uint8(255*value), 0, 255}
 		} else if value < 2 {
 			value -= 1
-			return pixel{1, value, 1 - value}
+			return pixel{1, uint8(255*value), uint8(255*(1.0 - value))}
 		} else if value < 3 {
 			value -= 2
-			return pixel{1 - value, 1, 0}
+			return pixel{uint8(255*(1.0 - value)), 255, 0}
 		} else if value < 4 {
 			value -= 3
-			return pixel{0, 1, value}
+			return pixel{0, 255, uint8(255*value)}
 		} else if value < 5 {
 			value -= 4
-			return pixel{0, 1 - value, 1}
+			return pixel{0, uint8(255*(1.0 - value)), 255}
 		} else {
 			value -= 5
-			return pixel{0, 0, 1 - value}
+			return pixel{0, 0, uint8(255*(1.0 - value))}
 		}
 
 	}
@@ -153,30 +154,16 @@ renderLoop:
 
 func drawScene() {
 
-	gl.Clear(gl.COLOR_BUFFER_BIT)
-	gl.MatrixMode(gl.PROJECTION)
-	gl.LoadIdentity()
-	gl.Ortho(0.0, WIDTH, HEIGHT, 0.0, -1, 1)
+	var data [HEIGHT][WIDTH][3]uint8
 
-	gl.MatrixMode(gl.MODELVIEW)
-
-	gl.Begin(gl.POINTS)
-
-	for t := 0; t < THREADS; t++ {
-		for x := int32(0); x < WIDTH; x++ {
-			for y := int32(0); y < HEIGHT; y++ {
-
-				if screen[x][y] == BLACK {
-					continue
-				}
-				gl.Color3f(screen[x][y].r, screen[x][y].g, screen[x][y].b)
-				gl.Vertex2i(x, y)
-			}
+	for x := int32(0); x < WIDTH; x++ {
+		for y := int32(0); y < HEIGHT; y++ {
+			data[y][x][0], data[y][x][1], data[y][x][2] = screen[x][y].r, screen[x][y].g, screen[x][y].b
 		}
 	}
 
-
-	gl.End()
+	gl.Clear(gl.COLOR_BUFFER_BIT)
+	gl.DrawPixels(WIDTH, HEIGHT,  gl.RGB, gl.UNSIGNED_BYTE, unsafe.Pointer(&data))
 
 }
 
@@ -249,6 +236,8 @@ func main() {
 				fmt.Println("Scene draw time", sceneEnd, "seconds.")
 
 				allFinished := true
+
+				calculationStart = time.Now()
 
 				for t := 0; t < THREADS; t++ {
 					done[c] = false
