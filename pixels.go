@@ -18,7 +18,7 @@ const (
 	WIDTH     = 1280
 	HEIGHT    = 1024
 	INFINITY  = 1e+50
-	THREADS   = 3
+	THREADS   = 4
 	STARTSIZE = 64
 	BATCH = WIDTH*16
 )
@@ -218,6 +218,7 @@ func main() {
 	var done [THREADS]bool
 
 	renderStart := time.Now()
+	calculationStart := time.Now()
 
 	for !window.ShouldClose() && !exit {
 
@@ -236,9 +237,16 @@ func main() {
 
 			if doneCount == THREADS {
 
-				fmt.Println("All threads done, rendering scene")
+				calculationEnd := time.Since(calculationStart).Seconds()
+
+				fmt.Println("All threads done in", calculationEnd, "seconds.")
+
+				sceneStart := time.Now()
 				drawScene()
 				window.SwapBuffers()
+				sceneEnd := time.Since(sceneStart).Seconds()
+
+				fmt.Println("Scene draw time", sceneEnd, "seconds.")
 
 				allFinished := true
 
@@ -253,7 +261,7 @@ func main() {
 
 				if allFinished {
 					renderEnd := time.Since(renderStart).Seconds()
-					fmt.Println("Render finished in", renderEnd, "seconds.")
+					fmt.Println("COMPLETED in", renderEnd, "seconds.")
 				}
 
 			}
