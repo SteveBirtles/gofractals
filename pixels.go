@@ -15,10 +15,10 @@ type pixel struct {
 }
 
 const (
-	WIDTH     = 1920
-	HEIGHT    = 1080
+	WIDTH     = 1280
+	HEIGHT    = 1024
 	INFINITY  = 1e+50
-	THREADS   = 4
+	THREADS   = 3
 	STARTSIZE = 64
 	BATCH = WIDTH*16
 )
@@ -33,7 +33,7 @@ var (
 	threadFinished [THREADS]bool
 	xCentre            = WIDTH / 2
 	yCentre            = HEIGHT / 2
-	fracX                = 0.0//-1.4
+	fracX                = -0.5//-1.4
 	fracY                = 0.0//0.00056
 	scale                = 0.005//0.0000001
 	BLACK                = pixel{0.0, 0.0, 0.0}
