@@ -33,12 +33,12 @@ var (
 	threadFinished [THREADS]bool
 	xCentre            = WIDTH / 2
 	yCentre            = HEIGHT / 2
-	fracX                = -1.4
-	fracY                = 0.00056
-	scale                = 0.0000001
+	fracX                = 0.0//-1.4
+	fracY                = 0.0//0.00056
+	scale                = 0.005//0.0000001
 	BLACK                = pixel{0.0, 0.0, 0.0}
 	WHITE                = pixel{1.0, 1.0, 1.0}
-	iterations      = 10000
+	iterations      = 100//10000
 )
 
 func init() {
@@ -158,6 +158,8 @@ func drawScene() {
 	gl.LoadIdentity()
 	gl.Ortho(0.0, WIDTH, HEIGHT, 0.0, -1, 1)
 
+	gl.MatrixMode(gl.MODELVIEW)
+
 	gl.Begin(gl.POINTS)
 
 	for t := 0; t < THREADS; t++ {
@@ -175,8 +177,6 @@ func drawScene() {
 
 
 	gl.End()
-
-	fmt.Println("Scene render complete")
 
 }
 
