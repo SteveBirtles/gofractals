@@ -13,15 +13,14 @@ import (
 )
 
 var (
-	texture   uint32
-	rotationX float32
-	rotationY float32
+	texture     uint32
+	rotationX   float32
+	rotationY   float32
 	frameLength float64
-	frames            = 0
-	second            = time.Tick(time.Second)
-	exit	bool
+	frames      = 0
+	second      = time.Tick(time.Second)
+	exit        bool
 )
-
 
 func main() {
 
@@ -31,13 +30,14 @@ func main() {
 	defer glfw.Terminate()
 
 	glfw.WindowHint(glfw.Resizable, glfw.False)
-	window, err := glfw.CreateWindow(1920, 1080, "Cube", glfw.GetPrimaryMonitor(), nil)
+	glfw.WindowHint(glfw.Decorated, glfw.False)
+	window, err := glfw.CreateWindow(1920, 1080, "Cube", nil, nil)
 	if err != nil {
 		panic(err)
 	}
 	window.MakeContextCurrent()
 	window.SetInputMode(glfw.CursorMode, glfw.CursorHidden)
-	window.SetPos(0,0)
+	window.SetPos(0, 0)
 
 	window.SetKeyCallback(func(_ *glfw.Window, key glfw.Key, _ int, action glfw.Action, _ glfw.ModifierKey) {
 		switch {
@@ -45,7 +45,6 @@ func main() {
 			exit = true
 		}
 	})
-
 
 	if err := gl.Init(); err != nil {
 		panic(err)
@@ -142,7 +141,6 @@ func setupScene() {
 
 }
 
-
 func drawScene() {
 
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
@@ -153,8 +151,8 @@ func drawScene() {
 	gl.Rotatef(rotationX, 1, 0, 0)
 	gl.Rotatef(rotationY, 0, 1, 0)
 
-	rotationX += float32(90*frameLength)
-	rotationY += float32(90*frameLength)
+	rotationX += float32(90 * frameLength)
+	rotationY += float32(90 * frameLength)
 
 	gl.BindTexture(gl.TEXTURE_2D, texture)
 
