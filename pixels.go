@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/go-gl/glfw/v3.2/glfw"
 	_ "image/png"
@@ -16,7 +17,7 @@ const (
 	WIDTH     = 1280
 	HEIGHT    = 1024
 	INFINITY  = 1e+50
-	THREADS   = 2
+	THREADS   = 4
 	STARTSIZE = 64
 )
 
@@ -30,6 +31,8 @@ var (
 	processed   [WIDTH][HEIGHT]bool
 	renderX     [THREADS]int
 	renderY     [THREADS]int
+	completed   chan int
+	rendered    chan bool
 
 	xCentre    = WIDTH / 2
 	yCentre    = HEIGHT / 2
@@ -84,14 +87,18 @@ func mandelbrot(x, y int) pixel {
 
 }
 
-func render(core int) {
+func render(core int, pixels int) {
+
+	fmt.Println("Thread", core, "started...")
 
 	pixelSize := STARTSIZE
 	renderX[core] = 0
 	renderY[core] = core * pixelSize
 
+	pixelCount := 0
+
 renderLoop:
-	for {
+	for pixelCount < pixels {
 
 		if renderY[core] < HEIGHT {
 
@@ -100,6 +107,7 @@ renderLoop:
 				if !processed[renderX[core]][renderY[core]] {
 
 					m := mandelbrot(renderX[core], renderY[core])
+					pixelCount++
 
 					/*var m pixel
 					switch core {
@@ -134,6 +142,7 @@ renderLoop:
 
 		} else {
 			if pixelSize == 1 {
+
 				break renderLoop
 			} else {
 				renderX[core] = 0
@@ -145,55 +154,8 @@ renderLoop:
 
 	}
 
-}
-
-func main() {
-
-	if err := glfw.Init(); err != nil {
-		log.Fatalln("failed to initialize glfw:", err)
-	}
-	defer glfw.Terminate()
-
-	glfw.WindowHint(glfw.Resizable, glfw.False)
-	glfw.WindowHint(glfw.Decorated, glfw.False)
-	window, err := glfw.CreateWindow(WIDTH, HEIGHT, "Pixels", nil, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	window.MakeContextCurrent()
-	window.SetInputMode(glfw.CursorMode, glfw.CursorHidden)
-	window.SetPos(0, 0)
-
-	window.SetKeyCallback(func(_ *glfw.Window, key glfw.Key, _ int, action glfw.Action, _ glfw.ModifierKey) {
-		switch {
-		case key == glfw.KeyEscape && action == glfw.Press:
-			exit = true
-		}
-	})
-
-	if err := gl.Init(); err != nil {
-		panic(err)
-	}
-
-	for t := 0; t < THREADS; t++ {
-		go render(t)
-	}
-
-	for !window.ShouldClose() && !exit {
-
-		glfw.PollEvents()
-
-		select {
-		case <-second:
-			drawScene()
-			window.SwapBuffers()
-		default:
-		}
-
-	}
-
-	window.SetShouldClose(true)
+	fmt.Println("Sending complete signal for thread", core)
+	completed <- core
 
 }
 
@@ -233,5 +195,91 @@ func drawScene() {
 	}
 
 	gl.End()
+
+	fmt.Println("Scene render complete, sending rendered signal")
+
+	rendered <- true
+
+}
+
+func main() {
+
+	if err := glfw.Init(); err != nil {
+		log.Fatalln("failed to initialize glfw:", err)
+	}
+	defer glfw.Terminate()
+
+	glfw.WindowHint(glfw.Resizable, glfw.False)
+	glfw.WindowHint(glfw.Decorated, glfw.False)
+	window, err := glfw.CreateWindow(WIDTH, HEIGHT, "Pixels", nil, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	window.MakeContextCurrent()
+	window.SetInputMode(glfw.CursorMode, glfw.CursorHidden)
+	window.SetPos(0, 0)
+
+	window.SetKeyCallback(func(_ *glfw.Window, key glfw.Key, _ int, action glfw.Action, _ glfw.ModifierKey) {
+		switch {
+		case key == glfw.KeyEscape && action == glfw.Press:
+			exit = true
+		}
+	})
+
+	if err := gl.Init(); err != nil {
+		panic(err)
+	}
+
+	completed = make(chan int)
+	rendered = make(chan bool)
+
+	for t := 0; t < THREADS; t++ {
+		go render(t, 1000)
+	}
+
+	var done [THREADS]bool
+
+	for !window.ShouldClose() && !exit {
+
+		select {
+		case c := <-completed:
+
+			done[c] = true
+			fmt.Println("Thread", c, "done.")
+			doneCount := 0
+
+			for t := 0; t < THREADS; t++ {
+				if done[t] {
+					doneCount++
+				}
+			}
+
+			if doneCount == THREADS {
+				fmt.Println("All threads done, rendering scene")
+				drawScene()
+				window.SwapBuffers()
+			}
+
+		default:
+
+			select {
+			case r := <-rendered:
+				if r {
+					fmt.Println("Rendered signal received...")
+					for t := 0; t < THREADS; t++ {
+						fmt.Println("Starting thread", t)
+						go render(t, 1000)
+					}
+				}
+			default:
+				glfw.PollEvents()
+			}
+
+		}
+
+	}
+
+	window.SetShouldClose(true)
 
 }
