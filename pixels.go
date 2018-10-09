@@ -7,6 +7,7 @@ import (
 	_ "image/png"
 	"log"
 	"time"
+	"runtime"
 )
 
 type pixel struct {
@@ -14,35 +15,35 @@ type pixel struct {
 }
 
 const (
-	WIDTH     = 1280
-	HEIGHT    = 1024
+	WIDTH     = 1920
+	HEIGHT    = 1080
 	INFINITY  = 1e+50
 	THREADS   = 4
 	STARTSIZE = 64
+	BATCH = WIDTH*16
 )
 
 var (
-	texture     uint32
-	frameLength float64
-	frames      = 0
-	second      = time.Tick(time.Second)
-	exit        bool
-	screen      [WIDTH][HEIGHT]pixel
-	processed   [WIDTH][HEIGHT]bool
-	renderX     [THREADS]int
-	renderY     [THREADS]int
-	completed   chan int
-	rendered    chan bool
-
-	xCentre    = WIDTH / 2
-	yCentre    = HEIGHT / 2
-	fracX      = -1.4
-	fracY      = 0.00056
-	scale      = 0.0000001
-	BLACK      = pixel{0.0, 0.0, 0.0}
-	WHITE      = pixel{1.0, 1.0, 1.0}
-	iterations = 10000
+	texture        uint32
+	frameLength    float64
+	exit           bool
+	screen         [WIDTH][HEIGHT]pixel
+	processed      [WIDTH][HEIGHT]bool
+	completed      chan int
+	threadFinished [THREADS]bool
+	xCentre            = WIDTH / 2
+	yCentre            = HEIGHT / 2
+	fracX                = -1.4
+	fracY                = 0.00056
+	scale                = 0.0000001
+	BLACK                = pixel{0.0, 0.0, 0.0}
+	WHITE                = pixel{1.0, 1.0, 1.0}
+	iterations      = 10000
 )
+
+func init() {
+	runtime.LockOSThread()
+}
 
 func mandelbrot(x, y int) pixel {
 
@@ -87,67 +88,57 @@ func mandelbrot(x, y int) pixel {
 
 }
 
-func render(core int, pixels int) {
+func render(core int) {
 
 	fmt.Println("Thread", core, "started...")
 
 	pixelSize := STARTSIZE
-	renderX[core] = 0
-	renderY[core] = core * pixelSize
+	renderX := 0
+	renderY := core * pixelSize
 
 	pixelCount := 0
 
 renderLoop:
-	for pixelCount < pixels {
+	for pixelCount < BATCH {
 
-		if renderY[core] < HEIGHT {
+		if renderY < HEIGHT {
 
-			if int(renderY[core]/STARTSIZE)%THREADS == core {
+			if int(renderY/STARTSIZE)%THREADS == core {
 
-				if !processed[renderX[core]][renderY[core]] {
+				if !processed[renderX][renderY] {
 
-					m := mandelbrot(renderX[core], renderY[core])
+					m := mandelbrot(renderX, renderY)
 					pixelCount++
-
-					/*var m pixel
-					switch core {
-					case 0:
-						m = pixel{1, 0, 0}
-					case 1:
-						m = pixel{0, 1, 0}
-					case 2:
-						m = pixel{0, 0, 1}
-					case 3:
-						m = pixel{1, 1, 0}
-					}*/
 
 					for u := 0; u < pixelSize; u++ {
 						for v := 0; v < pixelSize; v++ {
-							if renderX[core]+u < WIDTH && renderY[core]+v < HEIGHT {
-								screen[renderX[core]+u][renderY[core]+v] = m
+							if renderX+u < WIDTH && renderY+v < HEIGHT {
+								screen[renderX+u][renderY+v] = m
 							}
 						}
 					}
-					processed[renderX[core]][renderY[core]] = true
+					processed[renderX][renderY] = true
 				}
 
 			}
 
-			renderX[core] += pixelSize
+			renderX += pixelSize
 
-			if renderX[core] >= WIDTH {
-				renderX[core] = 0
-				renderY[core] += pixelSize
+			if renderX >= WIDTH {
+				renderX = 0
+				renderY += pixelSize
 			}
 
 		} else {
 			if pixelSize == 1 {
-
+				fmt.Println("Thread", core, "is finished!!!")
+				threadFinished[core] = true
 				break renderLoop
 			} else {
-				renderX[core] = 0
-				renderY[core] = core * pixelSize
+				renderX = 0
+				renderY = core * pixelSize
 				pixelSize = pixelSize / 2
+				continue renderLoop
 			}
 
 		}
@@ -156,6 +147,7 @@ renderLoop:
 
 	fmt.Println("Sending complete signal for thread", core)
 	completed <- core
+
 
 }
 
@@ -168,22 +160,10 @@ func drawScene() {
 
 	gl.Begin(gl.POINTS)
 
-	for x := int32(0); x < WIDTH; x++ {
-		for y := int32(0); y < HEIGHT; y++ {
+	for t := 0; t < THREADS; t++ {
+		for x := int32(0); x < WIDTH; x++ {
+			for y := int32(0); y < HEIGHT; y++ {
 
-			renderLine := false
-
-			for t := 0; t < THREADS; t++ {
-				if y == int32(renderY[t]) {
-					renderLine = true
-					break
-				}
-			}
-
-			if renderLine {
-				gl.Color3f(1, 1, 1)
-				gl.Vertex2i(x, y)
-			} else {
 				if screen[x][y] == BLACK {
 					continue
 				}
@@ -191,14 +171,12 @@ func drawScene() {
 				gl.Vertex2i(x, y)
 			}
 		}
-
 	}
+
 
 	gl.End()
 
-	fmt.Println("Scene render complete, sending rendered signal")
-
-	rendered <- true
+	fmt.Println("Scene render complete")
 
 }
 
@@ -231,14 +209,15 @@ func main() {
 		panic(err)
 	}
 
-	completed = make(chan int)
-	rendered = make(chan bool)
+	completed = make(chan int, 1)
 
 	for t := 0; t < THREADS; t++ {
-		go render(t, 1000)
+		go render(t)
 	}
 
 	var done [THREADS]bool
+
+	renderStart := time.Now()
 
 	for !window.ShouldClose() && !exit {
 
@@ -256,27 +235,33 @@ func main() {
 			}
 
 			if doneCount == THREADS {
+
 				fmt.Println("All threads done, rendering scene")
 				drawScene()
 				window.SwapBuffers()
+
+				allFinished := true
+
+				for t := 0; t < THREADS; t++ {
+					done[c] = false
+					if !threadFinished[t] {
+						allFinished = false
+						fmt.Println("Starting thread", t)
+						go render(t)
+					}
+				}
+
+				if allFinished {
+					renderEnd := time.Since(renderStart).Seconds()
+					fmt.Println("Render finished in", renderEnd, "seconds.")
+				}
+
 			}
 
 		default:
-
-			select {
-			case r := <-rendered:
-				if r {
-					fmt.Println("Rendered signal received...")
-					for t := 0; t < THREADS; t++ {
-						fmt.Println("Starting thread", t)
-						go render(t, 1000)
-					}
-				}
-			default:
-				glfw.PollEvents()
-			}
-
 		}
+
+		glfw.PollEvents()
 
 	}
 
