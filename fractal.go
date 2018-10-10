@@ -90,7 +90,20 @@ func julia(x, y int, jr, ji float64) float64 {
 	var i int
 	for i = 0; i < iterations; i++ {
 
-		z = z*z + c
+		switch pow {
+		case 2:
+			z = z*z + c
+		case 3:
+			z = z*z*z + c
+		case 4:
+			z = z*z*z*z + c
+		default:
+			zz := z
+			for iz := 0; iz < pow; iz++ {
+				z *= zz
+			}
+			z += c
+		}
 
 		if imag(z) > infinity || real(z) > infinity {
 			break
