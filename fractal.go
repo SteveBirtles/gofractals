@@ -37,10 +37,11 @@ var (
 	completed                          chan int
 	threadFinished                     [THREADS]bool
 	xCentre, yCentre, xOffset, yOffset int
-	phaser, mono                       bool
+	phaser, mono, doJulia              bool
 	fracX, fracY, scale, infinity      float64
-	iterations, segment, batch         int
+	iterations, segment, batch, pow    int
 	output                             string
+	juliaR, juliaI                     float64
 )
 
 func init() {
@@ -55,7 +56,42 @@ func mandelbrot(x, y int) float64 {
 
 	var i int
 	for i = 0; i < iterations; i++ {
+
+		switch pow {
+		case 2:
+			z = z*z + c
+		case 3:
+			z = z*z*z + c
+		case 4:
+			z = z*z*z*z + c
+		default:
+			zz := z
+			for iz := 0; iz < pow; iz++ {
+				z *= zz
+			}
+			z += c
+		}
+
+		if imag(z) > infinity || real(z) > infinity {
+			break
+		}
+	}
+
+	return float64(i) / float64(iterations)
+
+}
+
+
+func julia(x, y int, jr, ji float64) float64 {
+
+	z := complex(float64(x+xCentre)*scale+fracX, float64(y+yCentre)*scale+fracY)
+	c := complex(jr, ji)
+
+	var i int
+	for i = 0; i < iterations; i++ {
+
 		z = z*z + c
+
 		if imag(z) > infinity || real(z) > infinity {
 			break
 		}
@@ -84,7 +120,14 @@ renderLoop:
 
 				if !processed[renderX][renderY] {
 
-					m := mandelbrot(renderX, renderY)
+					var m float64
+
+					if !doJulia {
+						m = mandelbrot(renderX, renderY)
+					} else {
+						m = julia(renderX, renderY, juliaR, juliaI)
+					}
+
 					pixelCount++
 
 					for u := 0; u < pixelSize; u++ {
@@ -261,6 +304,10 @@ func main() {
 	outputPtr := flag.String("output", "lastrender.png", "Filename to save image in .png format")
 	imExitPtr := flag.Bool("exit", false, "Immediately exit after rendering")
 	batchPtr := flag.Int("batch", 20480, "Batch size between screen updates (default is 16 lines)")
+	powPtr := flag.Int("pow", 2, "Power for complex number iteration (2 for standard mandelbrot)")
+	juliaPtr := flag.Bool("julia", false, "Use Julia mode (true/false)")
+	juliaRPtr := flag.Float64("jr", 0, "Julia real part")
+	juliaIPtr := flag.Float64("ji", 0, "Julia imaginary part")
 
 	flag.Parse()
 
@@ -292,6 +339,16 @@ func main() {
 	if batch > WIDTH*HEIGHT {
 		batch = WIDTH * HEIGHT
 	}
+
+	pow = *powPtr
+	if pow < 2 { pow = 2 }
+
+	doJulia = *juliaPtr
+	if doJulia {
+		juliaR = *juliaRPtr
+		juliaI = *juliaIPtr
+	}
+
 
 	switch segment {
 	case 0:
