@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/glfw/v3.2/glfw"
 	_ "image/png"
 	"log"
+	"math"
 	"runtime"
 	"time"
 	"unsafe"
@@ -28,7 +29,7 @@ const (
 
 var (
 	exit           bool
-	pixel          [WIDTH][HEIGHT]rgb
+	pixel          [WIDTH][HEIGHT]float64
 	processed      [WIDTH][HEIGHT]bool
 	completed      chan int
 	threadFinished [THREADS]bool
@@ -40,13 +41,14 @@ var (
 	fracY          = 0.00056
 	scale          = 0.0000001
 	iterations     = 10000
+	phaser         = true
 )
 
 func init() {
 	runtime.LockOSThread()
 }
 
-func mandelbrot(x, y int) rgb {
+func mandelbrot(x, y int) float64 {
 
 	c := complex(float64(x-xCentre)*scale+fracX, float64(y-yCentre)*scale+fracY)
 
@@ -60,32 +62,7 @@ func mandelbrot(x, y int) rgb {
 		}
 	}
 
-	if i == iterations {
-		return BLACK
-	} else {
-
-		value := 6 * float64(i) / float64(iterations)
-
-		if value < 1 {
-			return rgb{uint8(255 * value), 0, 255}
-		} else if value < 2 {
-			value -= 1
-			return rgb{1, uint8(255 * value), uint8(255 * (1.0 - value))}
-		} else if value < 3 {
-			value -= 2
-			return rgb{uint8(255 * (1.0 - value)), 255, 0}
-		} else if value < 4 {
-			value -= 3
-			return rgb{0, 255, uint8(255 * value)}
-		} else if value < 5 {
-			value -= 4
-			return rgb{0, uint8(255 * (1.0 - value)), 255}
-		} else {
-			value -= 5
-			return rgb{0, 0, uint8(255 * (1.0 - value))}
-		}
-
-	}
+	return float64(i) / float64(iterations)
 
 }
 
@@ -131,6 +108,7 @@ renderLoop:
 			}
 
 		} else {
+
 			if pixelSize == 1 {
 				fmt.Println("Thread", core, "is finished!!!")
 				threadFinished[core] = true
@@ -151,7 +129,62 @@ renderLoop:
 
 }
 
-func drawScene() {
+func valueToColor(value float64, phased bool, phase float64) rgb {
+
+	if !phased {
+
+		value *= 6
+
+		if value < 1 {
+			return rgb{uint8(255 * value), 0, 255}
+		} else if value < 2 {
+			value -= 1
+			return rgb{1, uint8(255 * value), uint8(255 * (1.0 - value))}
+		} else if value < 3 {
+			value -= 2
+			return rgb{uint8(255 * (1.0 - value)), 255, 0}
+		} else if value < 4 {
+			value -= 3
+			return rgb{0, 255, uint8(255 * value)}
+		} else if value < 5 {
+			value -= 4
+			return rgb{0, uint8(255 * (1.0 - value)), 255}
+		} else {
+			value -= 5
+			return rgb{0, 0, uint8(255 * (1.0 - value))}
+		}
+	} else {
+
+		value += phase
+		if value >= 1 {
+			value -= 1
+		}
+		value *= 6
+
+		if value < 1 {
+			return rgb{255, 0, uint8(value * 255)}
+		} else if value < 2 {
+			value -= 1
+			return rgb{uint8((1 - value) * 255), 0, 255}
+		} else if value < 3 {
+			value -= 2
+			return rgb{0, uint8(value * 255), 255}
+		} else if value < 4 {
+			value -= 3
+			return rgb{0, 255, uint8((1 - value) * 255)}
+		} else if value < 5 {
+			value -= 4
+			return rgb{uint8(value * 255), 255, 0}
+		} else {
+			value -= 5
+			return rgb{255, uint8((1 - value) * 255), 0}
+		}
+
+	}
+
+}
+
+func drawScene(phased bool, phase float64) {
 
 	xOffset, yOffset := WIDTH-VIEWWIDTH, HEIGHT-VIEWHEIGHT
 
@@ -159,7 +192,10 @@ func drawScene() {
 
 	for x := 0; x < VIEWWIDTH; x++ {
 		for y := 0; y < VIEWHEIGHT; y++ {
-			data[VIEWHEIGHT-y-1][x][0], data[VIEWHEIGHT-y-1][x][1], data[VIEWHEIGHT-y-1][x][2] = pixel[x+xOffset][y+yOffset].r, pixel[x+xOffset][y+yOffset].g, pixel[x+xOffset][y+yOffset].b
+
+			c := valueToColor(pixel[x+xOffset][y+yOffset], phased, phase)
+
+			data[VIEWHEIGHT-y-1][x][0], data[VIEWHEIGHT-y-1][x][1], data[VIEWHEIGHT-y-1][x][2] = c.r, c.g, c.b
 		}
 	}
 
@@ -190,6 +226,8 @@ func main() {
 		switch {
 		case key == glfw.KeyEscape && action == glfw.Press:
 			exit = true
+		case key == glfw.KeySpace && action == glfw.Press:
+			phaser = false
 		}
 	})
 
@@ -207,6 +245,8 @@ func main() {
 
 	renderStart := time.Now()
 	calculationStart := time.Now()
+
+	allFinished := false
 
 	for !window.ShouldClose() && !exit {
 
@@ -230,19 +270,19 @@ func main() {
 				fmt.Println("All threads done in", calculationEnd, "seconds.")
 
 				sceneStart := time.Now()
-				drawScene()
+				drawScene(false, 0)
 				window.SwapBuffers()
 				sceneEnd := time.Since(sceneStart).Seconds()
 
 				fmt.Println("Scene draw time", sceneEnd, "seconds.")
 
-				allFinished := true
+				allFinished = true
 
 				calculationStart = time.Now()
 
 				for t := 0; t < THREADS; t++ {
-					done[c] = false
 					if !threadFinished[t] {
+						done[t] = false
 						allFinished = false
 						fmt.Println("Starting thread", t)
 						go render(t)
@@ -259,6 +299,11 @@ func main() {
 		default:
 		}
 
+		if allFinished && phaser {
+			_, f := math.Modf(time.Since(calculationStart).Seconds() / 10)
+			drawScene(true, f)
+			window.SwapBuffers()
+		}
 		glfw.PollEvents()
 
 	}
