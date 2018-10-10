@@ -6,47 +6,47 @@ import (
 	"github.com/go-gl/glfw/v3.2/glfw"
 	_ "image/png"
 	"log"
-	"time"
 	"runtime"
+	"time"
 	"unsafe"
 )
 
-type pixel struct {
+type rgb struct {
 	r, g, b uint8
 }
 
 const (
-	WIDTH     = 1280
-	HEIGHT    = 1024
-	INFINITY  = 1e+50
-	THREADS   = 4
-	STARTSIZE = 64
-	BATCH = WIDTH*16
+	WIDTH      = 1280
+	HEIGHT     = 1080
+	VIEWWIDTH  = 1280
+	VIEWHEIGHT = 1024
+	INFINITY   = 1e+50
+	THREADS    = 4
+	STARTSIZE  = 64
+	BATCH      = WIDTH * 16
 )
 
 var (
-	texture        uint32
-	frameLength    float64
 	exit           bool
-	screen         [WIDTH][HEIGHT]pixel
+	pixel          [WIDTH][HEIGHT]rgb
 	processed      [WIDTH][HEIGHT]bool
 	completed      chan int
 	threadFinished [THREADS]bool
-	xCentre            = WIDTH / 2
-	yCentre            = HEIGHT / 2
-	fracX                = -0.5//-1.4
-	fracY                = 0.0//0.00056
-	scale                = 0.005//0.0000001
-	BLACK                = pixel{0.0, 0.0, 0.0}
-	WHITE                = pixel{1.0, 1.0, 1.0}
-	iterations      = 100//10000
+	BLACK          = rgb{0.0, 0.0, 0.0}
+	WHITE          = rgb{1.0, 1.0, 1.0}
+	xCentre        = WIDTH / 2
+	yCentre        = HEIGHT / 2
+	fracX          = -1.4
+	fracY          = 0.00056
+	scale          = 0.0000001
+	iterations     = 10000
 )
 
 func init() {
 	runtime.LockOSThread()
 }
 
-func mandelbrot(x, y int) pixel {
+func mandelbrot(x, y int) rgb {
 
 	c := complex(float64(x-xCentre)*scale+fracX, float64(y-yCentre)*scale+fracY)
 
@@ -64,25 +64,25 @@ func mandelbrot(x, y int) pixel {
 		return BLACK
 	} else {
 
-		value := 6*float64(i)/float64(iterations)
+		value := 6 * float64(i) / float64(iterations)
 
 		if value < 1 {
-			return pixel{uint8(255*value), 0, 255}
+			return rgb{uint8(255 * value), 0, 255}
 		} else if value < 2 {
 			value -= 1
-			return pixel{1, uint8(255*value), uint8(255*(1.0 - value))}
+			return rgb{1, uint8(255 * value), uint8(255 * (1.0 - value))}
 		} else if value < 3 {
 			value -= 2
-			return pixel{uint8(255*(1.0 - value)), 255, 0}
+			return rgb{uint8(255 * (1.0 - value)), 255, 0}
 		} else if value < 4 {
 			value -= 3
-			return pixel{0, 255, uint8(255*value)}
+			return rgb{0, 255, uint8(255 * value)}
 		} else if value < 5 {
 			value -= 4
-			return pixel{0, uint8(255*(1.0 - value)), 255}
+			return rgb{0, uint8(255 * (1.0 - value)), 255}
 		} else {
 			value -= 5
-			return pixel{0, 0, uint8(255*(1.0 - value))}
+			return rgb{0, 0, uint8(255 * (1.0 - value))}
 		}
 
 	}
@@ -114,7 +114,7 @@ renderLoop:
 					for u := 0; u < pixelSize; u++ {
 						for v := 0; v < pixelSize; v++ {
 							if renderX+u < WIDTH && renderY+v < HEIGHT {
-								screen[renderX+u][renderY+v] = m
+								pixel[renderX+u][renderY+v] = m
 							}
 						}
 					}
@@ -149,21 +149,22 @@ renderLoop:
 	fmt.Println("Sending complete signal for thread", core)
 	completed <- core
 
-
 }
 
 func drawScene() {
 
-	var data [HEIGHT][WIDTH][3]uint8
+	xOffset, yOffset := WIDTH-VIEWWIDTH, HEIGHT-VIEWHEIGHT
 
-	for x := int32(0); x < WIDTH; x++ {
-		for y := int32(0); y < HEIGHT; y++ {
-			data[y][x][0], data[y][x][1], data[y][x][2] = screen[x][y].r, screen[x][y].g, screen[x][y].b
+	var data [VIEWHEIGHT][VIEWWIDTH][3]uint8
+
+	for x := 0; x < VIEWWIDTH; x++ {
+		for y := 0; y < VIEWHEIGHT; y++ {
+			data[VIEWHEIGHT-y-1][x][0], data[VIEWHEIGHT-y-1][x][1], data[VIEWHEIGHT-y-1][x][2] = pixel[x+xOffset][y+yOffset].r, pixel[x+xOffset][y+yOffset].g, pixel[x+xOffset][y+yOffset].b
 		}
 	}
 
 	gl.Clear(gl.COLOR_BUFFER_BIT)
-	gl.DrawPixels(WIDTH, HEIGHT,  gl.RGB, gl.UNSIGNED_BYTE, unsafe.Pointer(&data))
+	gl.DrawPixels(VIEWWIDTH, VIEWHEIGHT, gl.RGB, gl.UNSIGNED_BYTE, unsafe.Pointer(&data))
 
 }
 
@@ -176,7 +177,7 @@ func main() {
 
 	glfw.WindowHint(glfw.Resizable, glfw.False)
 	glfw.WindowHint(glfw.Decorated, glfw.False)
-	window, err := glfw.CreateWindow(WIDTH, HEIGHT, "Pixels", nil, nil)
+	window, err := glfw.CreateWindow(VIEWWIDTH, VIEWHEIGHT, "Pixels", nil, nil)
 	if err != nil {
 		panic(err)
 	}
