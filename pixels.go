@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/go-gl/glfw/v3.2/glfw"
@@ -28,20 +29,17 @@ const (
 )
 
 var (
-	exit           bool
-	pixel          [WIDTH][HEIGHT]float64
-	processed      [WIDTH][HEIGHT]bool
-	completed      chan int
-	threadFinished [THREADS]bool
-	BLACK          = rgb{0.0, 0.0, 0.0}
-	WHITE          = rgb{1.0, 1.0, 1.0}
-	xCentre        = WIDTH / 2
-	yCentre        = HEIGHT / 2
-	fracX          = -1.4
-	fracY          = 0.00056
-	scale          = 0.0000001
-	iterations     = 10000
-	phaser         = true
+	exit                               bool
+	pixel                              [WIDTH][HEIGHT]float64
+	processed                          [WIDTH][HEIGHT]bool
+	completed                          chan int
+	threadFinished                     [THREADS]bool
+	BLACK                              = rgb{0.0, 0.0, 0.0}
+	WHITE                              = rgb{1.0, 1.0, 1.0}
+	xCentre, yCentre, xOffset, yOffset int
+	phaser                             bool
+	fracX, fracY, scale                float64
+	iterations, segment                int
 )
 
 func init() {
@@ -50,7 +48,7 @@ func init() {
 
 func mandelbrot(x, y int) float64 {
 
-	c := complex(float64(x-xCentre)*scale+fracX, float64(y-yCentre)*scale+fracY)
+	c := complex(float64(x+xCentre)*scale+fracX, float64(y+yCentre)*scale+fracY)
 
 	z := complex(0, 0)
 
@@ -186,8 +184,6 @@ func valueToColor(value float64, phased bool, phase float64) rgb {
 
 func drawScene(phased bool, phase float64) {
 
-	xOffset, yOffset := WIDTH-VIEWWIDTH, HEIGHT-VIEWHEIGHT
-
 	var data [VIEWHEIGHT][VIEWWIDTH][3]uint8
 
 	for x := 0; x < VIEWWIDTH; x++ {
@@ -205,6 +201,71 @@ func drawScene(phased bool, phase float64) {
 }
 
 func main() {
+
+	fracXPtr := flag.Float64("x", -0.5, "X co-ordinate (floating point)")
+	fracYPtr := flag.Float64("y", 0, "Y co-ordinate (floating point)")
+	scalePtr := flag.Float64("z", 500, "Zoom (floating point)")
+	iterationsPtr := flag.Int("i", 200, "Iterations (integer)")
+	segmentPtr := flag.Int("s", 0, "Segment (0 for none or 1-6 for hex segment")
+	phaserPtr := flag.Bool("p", false, "Phase image after rendering (true/false)")
+
+	flag.Parse()
+
+	fracX = *fracXPtr
+	fracY = *fracYPtr
+
+	zoom := *scalePtr
+	if zoom == 0 {
+		zoom = 1
+	}
+	scale = 1.0 / zoom
+
+	iterations = *iterationsPtr
+
+	segment = *segmentPtr
+	if segment < 0 || segment > 6 {
+		segment = 0
+	}
+
+	phaser = *phaserPtr
+
+	switch segment {
+	case 0:
+		xCentre = -WIDTH / 2
+		yCentre = -HEIGHT / 2
+		xOffset = 0
+		yOffset = (HEIGHT - VIEWHEIGHT) / 2
+	case 1:
+		xCentre = -3 * WIDTH / 2
+		yCentre = -HEIGHT
+		xOffset = 0
+		yOffset = HEIGHT - VIEWHEIGHT
+	case 2:
+		xCentre = -WIDTH / 2
+		yCentre = -HEIGHT
+		xOffset = 0
+		yOffset = HEIGHT - VIEWHEIGHT
+	case 3:
+		xCentre = WIDTH / 2
+		yCentre = -HEIGHT
+		xOffset = 0
+		yOffset = HEIGHT - VIEWHEIGHT
+	case 4:
+		xCentre = -3 * WIDTH / 2
+		yCentre = 0
+		xOffset = 0
+		yOffset = 0
+	case 5:
+		xCentre = -WIDTH / 2
+		yCentre = 0
+		xOffset = 0
+		yOffset = 0
+	case 6:
+		xCentre = WIDTH / 2
+		yCentre = 0
+		xOffset = 0
+		yOffset = 0
+	}
 
 	if err := glfw.Init(); err != nil {
 		log.Fatalln("failed to initialize glfw:", err)
@@ -235,18 +296,18 @@ func main() {
 		panic(err)
 	}
 
+	drawScene(false, 0)
+	window.SwapBuffers()
+
+	var done [THREADS]bool
+	renderStart := time.Now()
+	calculationStart := time.Now()
+	allFinished := false
 	completed = make(chan int, 1)
 
 	for t := 0; t < THREADS; t++ {
 		go render(t)
 	}
-
-	var done [THREADS]bool
-
-	renderStart := time.Now()
-	calculationStart := time.Now()
-
-	allFinished := false
 
 	for !window.ShouldClose() && !exit {
 
