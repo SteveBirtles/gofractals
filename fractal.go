@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"github.com/go-gl/gl/v2.1/gl"
 	"github.com/go-gl/glfw/v3.2/glfw"
+	"image"
+	"image/color"
+	"image/png"
 	_ "image/png"
 	"log"
 	"math"
+	"os"
 	"runtime"
 	"time"
 	"unsafe"
@@ -22,24 +26,22 @@ const (
 	HEIGHT     = 1080
 	VIEWWIDTH  = 1280
 	VIEWHEIGHT = 1024
-	INFINITY   = 1e+50
 	THREADS    = 4
 	STARTSIZE  = 64
 	BATCH      = WIDTH * 16
 )
 
 var (
-	exit                               bool
+	exit, imExit                       bool
 	pixel                              [WIDTH][HEIGHT]float64
 	processed                          [WIDTH][HEIGHT]bool
 	completed                          chan int
 	threadFinished                     [THREADS]bool
-	BLACK                              = rgb{0.0, 0.0, 0.0}
-	WHITE                              = rgb{1.0, 1.0, 1.0}
 	xCentre, yCentre, xOffset, yOffset int
-	phaser                             bool
-	fracX, fracY, scale                float64
+	phaser, mono                       bool
+	fracX, fracY, scale, infinity      float64
 	iterations, segment                int
+	output                             string
 )
 
 func init() {
@@ -55,7 +57,7 @@ func mandelbrot(x, y int) float64 {
 	var i int
 	for i = 0; i < iterations; i++ {
 		z = z*z + c
-		if imag(z) > INFINITY || real(z) > INFINITY {
+		if imag(z) > infinity || real(z) > infinity {
 			break
 		}
 	}
@@ -131,53 +133,71 @@ func valueToColor(value float64, phased bool, phase float64) rgb {
 
 	if !phased {
 
-		value *= 6
+		if mono {
 
-		if value < 1 {
-			return rgb{uint8(255 * value), 0, 255}
-		} else if value < 2 {
-			value -= 1
-			return rgb{1, uint8(255 * value), uint8(255 * (1.0 - value))}
-		} else if value < 3 {
-			value -= 2
-			return rgb{uint8(255 * (1.0 - value)), 255, 0}
-		} else if value < 4 {
-			value -= 3
-			return rgb{0, 255, uint8(255 * value)}
-		} else if value < 5 {
-			value -= 4
-			return rgb{0, uint8(255 * (1.0 - value)), 255}
+			return rgb{uint8((1 - value) * 255), uint8((1 - value) * 255), uint8((1 - value) * 255)}
+
 		} else {
-			value -= 5
-			return rgb{0, 0, uint8(255 * (1.0 - value))}
+
+			value *= 6
+
+			if value < 1 {
+				return rgb{uint8(255 * value), 0, 255}
+			} else if value < 2 {
+				value -= 1
+				return rgb{1, uint8(255 * value), uint8(255 * (1.0 - value))}
+			} else if value < 3 {
+				value -= 2
+				return rgb{uint8(255 * (1.0 - value)), 255, 0}
+			} else if value < 4 {
+				value -= 3
+				return rgb{0, 255, uint8(255 * value)}
+			} else if value < 5 {
+				value -= 4
+				return rgb{0, uint8(255 * (1.0 - value)), 255}
+			} else {
+				value -= 5
+				return rgb{0, 0, uint8(255 * (1.0 - value))}
+			}
+
 		}
+
 	} else {
 
 		value += phase
 		if value >= 1 {
 			value -= 1
 		}
-		value *= 6
 
-		if value < 1 {
-			return rgb{255, 0, uint8(value * 255)}
-		} else if value < 2 {
-			value -= 1
-			return rgb{uint8((1 - value) * 255), 0, 255}
-		} else if value < 3 {
-			value -= 2
-			return rgb{0, uint8(value * 255), 255}
-		} else if value < 4 {
-			value -= 3
-			return rgb{0, 255, uint8((1 - value) * 255)}
-		} else if value < 5 {
-			value -= 4
-			return rgb{uint8(value * 255), 255, 0}
+		if mono {
+
+			value = math.Abs(value*2 - 1)
+			return rgb{uint8(value * 255), uint8(value * 255), uint8(value * 255)}
+
 		} else {
-			value -= 5
-			return rgb{255, uint8((1 - value) * 255), 0}
-		}
 
+			value *= 6
+
+			if value < 1 {
+				return rgb{255, 0, uint8(value * 255)}
+			} else if value < 2 {
+				value -= 1
+				return rgb{uint8((1 - value) * 255), 0, 255}
+			} else if value < 3 {
+				value -= 2
+				return rgb{0, uint8(value * 255), 255}
+			} else if value < 4 {
+				value -= 3
+				return rgb{0, 255, uint8((1 - value) * 255)}
+			} else if value < 5 {
+				value -= 4
+				return rgb{uint8(value * 255), 255, 0}
+			} else {
+				value -= 5
+				return rgb{255, uint8((1 - value) * 255), 0}
+			}
+
+		}
 	}
 
 }
@@ -200,14 +220,47 @@ func drawScene(phased bool, phase float64) {
 
 }
 
+func saveImage() {
+
+	img := image.NewNRGBA(image.Rect(0, 0, WIDTH, HEIGHT))
+
+	for x := 0; x < WIDTH; x++ {
+		for y := 0; y < HEIGHT; y++ {
+			c := valueToColor(pixel[x][y], false, 0)
+			img.Set(x, y, color.RGBA{R: c.r, G: c.g, B: c.b, A: 255})
+		}
+	}
+
+	f, err := os.Create(output)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		log.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("PNG file saved successfully")
+
+}
+
 func main() {
 
 	fracXPtr := flag.Float64("x", -0.5, "X co-ordinate (floating point)")
 	fracYPtr := flag.Float64("y", 0, "Y co-ordinate (floating point)")
 	scalePtr := flag.Float64("z", 500, "Zoom (floating point)")
 	iterationsPtr := flag.Int("i", 200, "Iterations (integer)")
-	segmentPtr := flag.Int("s", 0, "Segment (0 for none or 1-6 for hex segment")
-	phaserPtr := flag.Bool("p", false, "Phase image after rendering (true/false)")
+	segmentPtr := flag.Int("seg", 0, "Segment (0 for none or 1-6 for hex segment")
+	phaserPtr := flag.Bool("phase", false, "Phase image after rendering (true/false)")
+	infinityPtr := flag.Float64("inf", 1e+100, "Value for infinity, e.g. 1e+100")
+	monoPtr := flag.Bool("mono", false, "Use monochrome mode (true/false)")
+	outputPtr := flag.String("output", "lastrender.png", "Filename to save image in .png format")
+	imExitPtr := flag.Bool("exit", false, "Immediately exit after rendering")
 
 	flag.Parse()
 
@@ -228,6 +281,10 @@ func main() {
 	}
 
 	phaser = *phaserPtr
+	infinity = *infinityPtr
+	mono = *monoPtr
+	output = *outputPtr
+	imExit = *imExitPtr
 
 	switch segment {
 	case 0:
@@ -287,8 +344,6 @@ func main() {
 		switch {
 		case key == glfw.KeyEscape && action == glfw.Press:
 			exit = true
-		case key == glfw.KeySpace && action == glfw.Press:
-			phaser = false
 		}
 	})
 
@@ -352,6 +407,14 @@ func main() {
 
 				if allFinished {
 					renderEnd := time.Since(renderStart).Seconds()
+
+					if output != "" {
+						saveImage()
+						if imExit {
+							exit = true
+						}
+					}
+
 					fmt.Println("COMPLETED in", renderEnd, "seconds.")
 				}
 
