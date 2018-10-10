@@ -28,7 +28,6 @@ const (
 	VIEWHEIGHT = 1024
 	THREADS    = 4
 	STARTSIZE  = 64
-	BATCH      = WIDTH * 16
 )
 
 var (
@@ -40,7 +39,7 @@ var (
 	xCentre, yCentre, xOffset, yOffset int
 	phaser, mono                       bool
 	fracX, fracY, scale, infinity      float64
-	iterations, segment                int
+	iterations, segment, batch         int
 	output                             string
 )
 
@@ -77,7 +76,7 @@ func render(core int) {
 	pixelCount := 0
 
 renderLoop:
-	for pixelCount < BATCH {
+	for pixelCount < batch {
 
 		if renderY < HEIGHT {
 
@@ -261,6 +260,7 @@ func main() {
 	monoPtr := flag.Bool("mono", false, "Use monochrome mode (true/false)")
 	outputPtr := flag.String("output", "lastrender.png", "Filename to save image in .png format")
 	imExitPtr := flag.Bool("exit", false, "Immediately exit after rendering")
+	batchPtr := flag.Int("batch", 20480, "Batch size between screen updates (default is 16 lines)")
 
 	flag.Parse()
 
@@ -285,6 +285,13 @@ func main() {
 	mono = *monoPtr
 	output = *outputPtr
 	imExit = *imExitPtr
+	batch = *batchPtr
+	if batch < 1 {
+		batch = 1
+	}
+	if batch > WIDTH*HEIGHT {
+		batch = WIDTH * HEIGHT
+	}
 
 	switch segment {
 	case 0:
