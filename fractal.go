@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"time"
 	"unsafe"
+	"math/cmplx"
 )
 
 type rgb struct {
@@ -37,7 +38,7 @@ var (
 	completed                          chan int
 	threadFinished                     [THREADS]bool
 	xCentre, yCentre, xOffset, yOffset int
-	phaser, mono, doJulia              bool
+	phaser, mono, doJulia, doTricorn   bool
 	fracX, fracY, scale, infinity      float64
 	iterations, segment, batch, pow    int
 	output                             string
@@ -55,26 +56,63 @@ func mandelbrot(x, y int) float64 {
 	z := complex(0, 0)
 
 	var i int
-	for i = 0; i < iterations; i++ {
 
-		switch pow {
-		case 2:
+	switch pow {
+	case 2:
+		for i = 0; i < iterations; i++ {
 			z = z*z + c
-		case 3:
-			z = z*z*z + c
-		case 4:
-			z = z*z*z*z + c
-		default:
+			if imag(z) > infinity || real(z) > infinity {
+				break
+			}
+		}
+	default:
+		for i = 0; i < iterations; i++ {
 			zz := z
 			for iz := 0; iz < pow; iz++ {
 				z *= zz
 			}
 			z += c
+			if imag(z) > infinity || real(z) > infinity {
+				break
+			}
 		}
 
-		if imag(z) > infinity || real(z) > infinity {
-			break
+	}
+
+	return float64(i) / float64(iterations)
+
+}
+
+
+func tricorn(x, y int) float64 {
+
+	c := complex(float64(x+xCentre)*scale+fracX, float64(y+yCentre)*scale+fracY)
+
+	z := complex(0, 0)
+
+	var i int
+
+	switch pow {
+	case 2:
+		for i = 0; i < iterations; i++ {
+			z = cmplx.Conj(z*z) + c
+			if imag(z) > infinity || real(z) > infinity {
+				break
+			}
 		}
+	default:
+		for i = 0; i < iterations; i++ {
+			zz := z
+			for iz := 0; iz < pow; iz++ {
+				z *= zz
+			}
+			z = cmplx.Conj(z)
+			z += c
+			if imag(z) > infinity || real(z) > infinity {
+				break
+			}
+		}
+
 	}
 
 	return float64(i) / float64(iterations)
@@ -135,7 +173,9 @@ renderLoop:
 
 					var m float64
 
-					if !doJulia {
+					if doTricorn {
+						m = tricorn(renderX, renderY)
+					} else if !doJulia {
 						m = mandelbrot(renderX, renderY)
 					} else {
 						m = julia(renderX, renderY, juliaR, juliaI)
@@ -311,14 +351,15 @@ func main() {
 	scalePtr := flag.Float64("z", 500, "Zoom (floating point)")
 	iterationsPtr := flag.Int("i", 200, "Iterations (integer)")
 	segmentPtr := flag.Int("seg", 0, "Segment (0 for none or 1-6 for hex segment")
-	phaserPtr := flag.Bool("phase", false, "Phase image after rendering (true/false)")
-	infinityPtr := flag.Float64("inf", 1e+100, "Value for infinity, e.g. 1e+100")
-	monoPtr := flag.Bool("mono", false, "Use monochrome mode (true/false)")
+	phaserPtr := flag.Bool("phase", false, "Phase image after rendering")
+	infinityPtr := flag.Float64("inf", 1e+100, "Value for infinity")
+	monoPtr := flag.Bool("mono", false, "Use monochrome mode")
 	outputPtr := flag.String("output", "lastrender.png", "Filename to save image in .png format")
 	imExitPtr := flag.Bool("exit", false, "Immediately exit after rendering")
 	batchPtr := flag.Int("batch", 20480, "Batch size between screen updates (default is 16 lines)")
 	powPtr := flag.Int("pow", 2, "Power for complex number iteration (2 for standard mandelbrot)")
-	juliaPtr := flag.Bool("julia", false, "Use Julia mode (true/false)")
+	tricornPtr := flag.Bool("tricorn", false, "Use Tricorn mode")
+	juliaPtr := flag.Bool("julia", false, "Use Julia mode")
 	juliaRPtr := flag.Float64("jr", 0, "Julia real part")
 	juliaIPtr := flag.Float64("ji", 0, "Julia imaginary part")
 
@@ -361,6 +402,8 @@ func main() {
 		juliaR = *juliaRPtr
 		juliaI = *juliaIPtr
 	}
+
+	doTricorn = *tricornPtr
 
 
 	switch segment {
