@@ -38,7 +38,7 @@ var (
 	completed                          chan int
 	threadFinished                     [THREADS]bool
 	xCentre, yCentre, xOffset, yOffset int
-	phaser, mono, doJulia, doTricorn   bool
+	phaser, mono, doJulia, doTricorn, doBurningShip   bool
 	fracX, fracY, scale, infinity      float64
 	iterations, segment, batch, pow    int
 	output                             string
@@ -61,6 +61,41 @@ func mandelbrot(x, y int) float64 {
 	case 2:
 		for i = 0; i < iterations; i++ {
 			z = z*z + c
+			if imag(z) > infinity || real(z) > infinity {
+				break
+			}
+		}
+	default:
+		for i = 0; i < iterations; i++ {
+			zz := z
+			for iz := 0; iz < pow; iz++ {
+				z *= zz
+			}
+			z += c
+			if imag(z) > infinity || real(z) > infinity {
+				break
+			}
+		}
+
+	}
+
+	return float64(i) / float64(iterations)
+
+}
+
+func burningShip(x, y int) float64 {
+
+	c := complex(float64(x+xCentre)*scale+fracX, float64(y+yCentre)*scale+fracY)
+
+	z := complex(0, 0)
+
+	var i int
+
+	switch pow {
+	case 2:
+		for i = 0; i < iterations; i++ {
+			s := complex(math.Abs(real(z)), math.Abs(imag(z)))
+			z = s*s + c
 			if imag(z) > infinity || real(z) > infinity {
 				break
 			}
@@ -173,12 +208,14 @@ renderLoop:
 
 					var m float64
 
-					if doTricorn {
+					if doBurningShip {
+						m = burningShip(renderX, renderY)
+				 	} else if doTricorn {
 						m = tricorn(renderX, renderY)
-					} else if !doJulia {
-						m = mandelbrot(renderX, renderY)
-					} else {
+					} else if doJulia {
 						m = julia(renderX, renderY, juliaR, juliaI)
+					} else {
+						m = mandelbrot(renderX, renderY)
 					}
 
 					pixelCount++
@@ -362,6 +399,7 @@ func main() {
 	juliaPtr := flag.Bool("julia", false, "Use Julia mode")
 	juliaRPtr := flag.Float64("jr", 0, "Julia real part")
 	juliaIPtr := flag.Float64("ji", 0, "Julia imaginary part")
+	burningShipPtr := flag.Bool("burningship", false, "Use Burning Ship mode")
 
 	flag.Parse()
 
@@ -404,7 +442,7 @@ func main() {
 	}
 
 	doTricorn = *tricornPtr
-
+	doBurningShip = *burningShipPtr
 
 	switch segment {
 	case 0:
