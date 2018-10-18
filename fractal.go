@@ -40,9 +40,9 @@ var (
 	xCentre, yCentre, xOffset, yOffset int
 	phaser, mono, doJulia, doTricorn, doBurningShip   bool
 	fracX, fracY, scale, infinity      float64
-	iterations, segment, batch, pow    int
+	iterations, segment, batch, pow, palette    int
 	output                             string
-	juliaR, juliaI, phaseSet           float64
+	juliaR, juliaI           float64
 )
 
 func init() {
@@ -263,39 +263,49 @@ renderLoop:
 
 func valueToColor(value float64, phased bool, phase float64) rgb {
 
+	var c rgb
+
 	if !phased {
 
 		if mono {
 
-			return rgb{uint8((1 - value) * 255), uint8((1 - value) * 255), uint8((1 - value) * 255)}
+			c = rgb{uint8((1 - value) * 255), uint8((1 - value) * 255), uint8((1 - value) * 255)}
 
 		} else {
 
-			value += phase
-			if value >= 1 {
-				value -= 1
-			}
 			value *= 6
 
 			if value < 1 {
-				return rgb{uint8(255 * value), 0, 255}
+				c = rgb{uint8(255 * value), 0, 255}
 			} else if value < 2 {
 				value -= 1
-				return rgb{1, uint8(255 * value), uint8(255 * (1.0 - value))}
+				c = rgb{255, uint8(255 * value), uint8(255 * (1.0 - value))}
 			} else if value < 3 {
 				value -= 2
-				return rgb{uint8(255 * (1.0 - value)), 255, 0}
+				c = rgb{uint8(255 * (1.0 - value)), 255, 0}
 			} else if value < 4 {
 				value -= 3
-				return rgb{0, 255, uint8(255 * value)}
+				c = rgb{0, 255, uint8(255 * value)}
 			} else if value < 5 {
 				value -= 4
-				return rgb{0, uint8(255 * (1.0 - value)), 255}
+				c = rgb{0, uint8(255 * (1.0 - value)), 255}
 			} else {
 				value -= 5
-				return rgb{0, 0, uint8(255 * (1.0 - value))}
+				c = rgb{0, 0, uint8(255 * (1.0 - value))}
 			}
 
+			switch palette {
+			case 1:
+				c.r, c.g = c.g, c.r
+			case 2:
+				c.g, c.b = c.b, c.g
+			case 3:
+				c.r, c.b = c.b, c.r
+			case 4:
+				c.r, c.g, c.b = c.b, c.r, c.g
+			case 5:
+				c.r, c.g, c.b = c.g, c.b, c.r
+			}
 		}
 
 	} else {
@@ -308,33 +318,35 @@ func valueToColor(value float64, phased bool, phase float64) rgb {
 		if mono {
 
 			value = math.Abs(value*2 - 1)
-			return rgb{uint8(value * 255), uint8(value * 255), uint8(value * 255)}
+			c = rgb{uint8(value * 255), uint8(value * 255), uint8(value * 255)}
 
 		} else {
 
 			value *= 6
 
 			if value < 1 {
-				return rgb{255, 0, uint8(value * 255)}
+				c = rgb{255, 0, uint8(value * 255)}
 			} else if value < 2 {
 				value -= 1
-				return rgb{uint8((1 - value) * 255), 0, 255}
+				c = rgb{uint8((1 - value) * 255), 0, 255}
 			} else if value < 3 {
 				value -= 2
-				return rgb{0, uint8(value * 255), 255}
+				c = rgb{0, uint8(value * 255), 255}
 			} else if value < 4 {
 				value -= 3
-				return rgb{0, 255, uint8((1 - value) * 255)}
+				c = rgb{0, 255, uint8((1 - value) * 255)}
 			} else if value < 5 {
 				value -= 4
-				return rgb{uint8(value * 255), 255, 0}
+				c = rgb{uint8(value * 255), 255, 0}
 			} else {
 				value -= 5
-				return rgb{255, uint8((1 - value) * 255), 0}
+				c = rgb{255, uint8((1 - value) * 255), 0}
 			}
 
 		}
 	}
+
+	return c
 
 }
 
@@ -362,7 +374,7 @@ func saveImage() {
 
 	for x := 0; x < WIDTH; x++ {
 		for y := 0; y < HEIGHT; y++ {
-			c := valueToColor(pixel[x][y], false, phaseSet)
+			c := valueToColor(pixel[x][y], false, 0)
 			img.Set(x, y, color.RGBA{R: c.r, G: c.g, B: c.b, A: 255})
 		}
 	}
@@ -404,7 +416,8 @@ func main() {
 	juliaRPtr := flag.Float64("jr", 0, "Julia real part")
 	juliaIPtr := flag.Float64("ji", 0, "Julia imaginary part")
 	burningShipPtr := flag.Bool("burningship", false, "Use Burning Ship mode")
-	phaseSetPtr := flag.Float64("colour", 0, "Change colour phase (0 - 1)")
+	palettePtr := flag.Int("palette", 0, "Colour palette (0 - 5")
+
 
 	flag.Parse()
 
@@ -448,11 +461,7 @@ func main() {
 
 	doTricorn = *tricornPtr
 	doBurningShip = *burningShipPtr
-
-	phaseSet = *phaseSetPtr
-	if phaseSet < 0 || phaseSet > 1 {
-		phaseSet = 0
-	}
+	palette = *palettePtr
 
 	switch segment {
 	case 0:
@@ -519,7 +528,7 @@ func main() {
 		panic(err)
 	}
 
-	drawScene(false, phaseSet)
+	drawScene(false, 0)
 	window.SwapBuffers()
 
 	var done [THREADS]bool
@@ -554,7 +563,7 @@ func main() {
 				fmt.Println("All threads done in", calculationEnd, "seconds.")
 
 				sceneStart := time.Now()
-				drawScene(false, phaseSet)
+				drawScene(false, 0)
 				window.SwapBuffers()
 				sceneEnd := time.Since(sceneStart).Seconds()
 
