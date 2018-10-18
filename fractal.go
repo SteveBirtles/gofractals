@@ -189,7 +189,7 @@ func julia(x, y int, jr, ji float64) float64 {
 
 func render(core int) {
 
-	fmt.Println("Thread", core, "started...")
+	fmt.Println("[", segment, "] Thread", core, "started...")
 
 	pixelSize := STARTSIZE
 	renderX := 0
@@ -242,7 +242,7 @@ renderLoop:
 		} else {
 
 			if pixelSize == 1 {
-				fmt.Println("Thread", core, "is finished!!!")
+				fmt.Println("[", segment, "] Thread", core, "is finished!!!")
 				threadFinished[core] = true
 				break renderLoop
 			} else {
@@ -256,7 +256,7 @@ renderLoop:
 
 	}
 
-	fmt.Println("Sending complete signal for thread", core)
+	fmt.Println("[", segment, "] Sending complete signal for thread", core)
 	completed <- core
 
 }
@@ -393,7 +393,7 @@ func saveImage() {
 		log.Fatal(err)
 	}
 
-	fmt.Println("PNG file saved successfully")
+	fmt.Println("[", segment, "] PNG file saved successfully")
 
 }
 
@@ -547,7 +547,7 @@ func main() {
 		case c := <-completed:
 
 			done[c] = true
-			fmt.Println("Thread", c, "done.")
+			fmt.Println("[", segment, "] Thread", c, "done.")
 			doneCount := 0
 
 			for t := 0; t < THREADS; t++ {
@@ -560,14 +560,14 @@ func main() {
 
 				calculationEnd := time.Since(calculationStart).Seconds()
 
-				fmt.Println("All threads done in", calculationEnd, "seconds.")
+				fmt.Println("[", segment, "] All threads done in", calculationEnd, "seconds.")
 
 				sceneStart := time.Now()
 				drawScene(false, 0)
 				window.SwapBuffers()
 				sceneEnd := time.Since(sceneStart).Seconds()
 
-				fmt.Println("Scene draw time", sceneEnd, "seconds.")
+				fmt.Println("[", segment, "] Scene draw time", sceneEnd, "seconds.")
 
 				allFinished = true
 
@@ -577,7 +577,7 @@ func main() {
 					if !threadFinished[t] {
 						done[t] = false
 						allFinished = false
-						fmt.Println("Starting thread", t)
+						fmt.Println("[", segment, "] Starting thread", t)
 						go render(t)
 					}
 				}
@@ -592,7 +592,7 @@ func main() {
 						}
 					}
 
-					fmt.Println("COMPLETED in", renderEnd, "seconds.")
+					fmt.Println("[", segment, "] COMPLETED in", renderEnd, "seconds.")
 				}
 
 			}
