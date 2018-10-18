@@ -42,7 +42,7 @@ var (
 	fracX, fracY, scale, infinity      float64
 	iterations, segment, batch, pow    int
 	output                             string
-	juliaR, juliaI                     float64
+	juliaR, juliaI, phaseSet           float64
 )
 
 func init() {
@@ -271,6 +271,10 @@ func valueToColor(value float64, phased bool, phase float64) rgb {
 
 		} else {
 
+			value += phase
+			if value >= 1 {
+				value -= 1
+			}
 			value *= 6
 
 			if value < 1 {
@@ -358,7 +362,7 @@ func saveImage() {
 
 	for x := 0; x < WIDTH; x++ {
 		for y := 0; y < HEIGHT; y++ {
-			c := valueToColor(pixel[x][y], false, 0)
+			c := valueToColor(pixel[x][y], false, phaseSet)
 			img.Set(x, y, color.RGBA{R: c.r, G: c.g, B: c.b, A: 255})
 		}
 	}
@@ -400,6 +404,7 @@ func main() {
 	juliaRPtr := flag.Float64("jr", 0, "Julia real part")
 	juliaIPtr := flag.Float64("ji", 0, "Julia imaginary part")
 	burningShipPtr := flag.Bool("burningship", false, "Use Burning Ship mode")
+	phaseSetPtr := flag.Float64("colour", 0, "Change colour phase (0 - 1)")
 
 	flag.Parse()
 
@@ -443,6 +448,11 @@ func main() {
 
 	doTricorn = *tricornPtr
 	doBurningShip = *burningShipPtr
+
+	phaseSet = *phaseSetPtr
+	if phaseSet < 0 || phaseSet > 1 {
+		phaseSet = 0
+	}
 
 	switch segment {
 	case 0:
@@ -509,7 +519,7 @@ func main() {
 		panic(err)
 	}
 
-	drawScene(false, 0)
+	drawScene(false, phaseSet)
 	window.SwapBuffers()
 
 	var done [THREADS]bool
@@ -544,7 +554,7 @@ func main() {
 				fmt.Println("All threads done in", calculationEnd, "seconds.")
 
 				sceneStart := time.Now()
-				drawScene(false, 0)
+				drawScene(false, phaseSet)
 				window.SwapBuffers()
 				sceneEnd := time.Since(sceneStart).Seconds()
 
